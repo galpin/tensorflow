@@ -327,9 +327,18 @@ class TensorFlowWheelBuilder:
             '--local_cpu_resources=HOST_CPUS*.75',
         ])
 
+        # Progress reporting - always show build progress
+        flags.extend([
+            '--show_progress',
+            '--show_progress_rate_limit=1',  # Update progress every second
+            '--ui_event_filters=-info,-debug,-warning',  # Reduce noise
+            '--noshow_loading_progress',  # Don't show loading messages
+        ])
+
         # Verbose output if requested
         if self.verbose:
             flags.append('--config=verbose_logs')
+            flags.append('--subcommands')  # Show actual commands being run
         else:
             flags.append('--config=short_logs')
 
@@ -350,8 +359,17 @@ class TensorFlowWheelBuilder:
         cmd: List[str],
         cwd: Optional[Path] = None,
         env: Optional[dict] = None,
+        stream_output: bool = True,
     ) -> subprocess.CompletedProcess:
-        """Run a command and handle errors."""
+        """Run a command and handle errors.
+
+        Args:
+            cmd: Command and arguments to run.
+            cwd: Working directory for the command.
+            env: Additional environment variables.
+            stream_output: If True, stream stdout/stderr to terminal in real-time.
+                          If False, capture output silently.
+        """
         logger.info(f'Running: {" ".join(cmd[:5])}...')
         if self.verbose:
             logger.info(f'Full command: {" ".join(cmd)}')
@@ -361,14 +379,25 @@ class TensorFlowWheelBuilder:
             merged_env.update(env)
 
         try:
-            result = subprocess.run(
-                cmd,
-                cwd=cwd or self.tf_root,
-                env=merged_env,
-                capture_output=not self.verbose,
-                text=True,
-                check=True,
-            )
+            if stream_output:
+                # Stream output to terminal in real-time for progress visibility
+                result = subprocess.run(
+                    cmd,
+                    cwd=cwd or self.tf_root,
+                    env=merged_env,
+                    text=True,
+                    check=True,
+                )
+            else:
+                # Capture output silently
+                result = subprocess.run(
+                    cmd,
+                    cwd=cwd or self.tf_root,
+                    env=merged_env,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
             return result
         except subprocess.CalledProcessError as e:
             logger.error(f'Command failed with exit code {e.returncode}')
