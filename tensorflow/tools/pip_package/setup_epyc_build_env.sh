@@ -185,7 +185,13 @@ install_system_dependencies() {
     fi
 
     log_info "Updating package lists..."
-    apt-get update
+    # Use || true to allow apt-get update to continue even if third-party
+    # repositories (like Yarn, Docker, etc.) have GPG key issues.
+    # The Ubuntu main repositories will still be updated successfully.
+    apt-get update || {
+        log_warning "apt-get update had errors (likely from third-party repositories)"
+        log_warning "Continuing with installation - Ubuntu repositories were updated"
+    }
 
     log_info "Installing build essentials and dependencies..."
     apt-get install -y --no-install-recommends \
