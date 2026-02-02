@@ -272,11 +272,9 @@ class TensorFlowWheelBuilder:
         flags.append('-O3')
 
         # Additional optimization flags
-        flags.extend([
-            '-funroll-loops',
-            '-ffast-math',
-            '-fno-math-errno',
-        ])
+        # Note: Do NOT use -ffast-math as it breaks IEEE float handling
+        # (infinity, NaN) which TensorFlow's ml_dtypes library requires
+        flags.append('-funroll-loops')
 
         return flags
 
