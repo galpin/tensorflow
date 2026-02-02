@@ -199,7 +199,7 @@ class TensorFlowWheelBuilder:
         target_platform: str = 'manylinux2014',
     ):
         self.cpu_info = CPUInfo()
-        self.python_path = python_path or sys.executable
+        self.python_path = python_path or self._detect_python()
         self.output_dir = Path(output_dir) if output_dir else Path.cwd() / 'wheel_output'
         self.jobs = jobs or self._calculate_optimal_jobs()
         self.verbose = verbose
@@ -208,6 +208,35 @@ class TensorFlowWheelBuilder:
         self.wheel_name = wheel_name
         self.target_platform = target_platform
         self.tf_root = self._find_tensorflow_root()
+
+    def _detect_python(self) -> str:
+        """Detect the Python interpreter to use for building.
+
+        Priority:
+        1. VIRTUAL_ENV environment variable (if set, use that venv's Python)
+        2. sys.executable (current Python running this script)
+
+        Returns:
+            Path to Python interpreter.
+        """
+        # Check if we're in a virtual environment
+        venv_path = os.environ.get('VIRTUAL_ENV')
+        if venv_path:
+            venv_python = Path(venv_path) / 'bin' / 'python'
+            if venv_python.exists():
+                # Get Python version for logging
+                result = subprocess.run(
+                    [str(venv_python), '--version'],
+                    capture_output=True,
+                    text=True,
+                )
+                version = result.stdout.strip() if result.returncode == 0 else 'unknown'
+                logger.info(f'Using virtual environment Python: {venv_python} ({version})')
+                return str(venv_python)
+
+        # Fall back to current Python
+        logger.info(f'Using current Python: {sys.executable}')
+        return sys.executable
 
     def _find_tensorflow_root(self) -> Path:
         """Find the TensorFlow source root directory."""
@@ -494,6 +523,14 @@ class TensorFlowWheelBuilder:
         Returns:
             Path to the built wheel file.
         """
+        # Get Python version for display
+        py_version_result = subprocess.run(
+            [self.python_path, '--version'],
+            capture_output=True,
+            text=True,
+        )
+        py_version = py_version_result.stdout.strip() if py_version_result.returncode == 0 else 'unknown'
+
         logger.info('=' * 60)
         logger.info('TensorFlow Wheel Builder for AMD EPYC')
         logger.info('=' * 60)
@@ -501,6 +538,7 @@ class TensorFlowWheelBuilder:
         logger.info(f'\nTensorFlow root: {self.tf_root}')
         logger.info(f'Output directory: {self.output_dir}')
         logger.info(f'Parallel jobs: {self.jobs}')
+        logger.info(f'Python: {self.python_path} ({py_version})')
         logger.info('=' * 60)
 
         # Check prerequisites
