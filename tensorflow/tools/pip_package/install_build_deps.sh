@@ -199,6 +199,7 @@ apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
+    gnupg \
     pkg-config \
     zip \
     unzip \
