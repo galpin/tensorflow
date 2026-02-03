@@ -1,100 +1,52 @@
 {
     "name": "TensorFlow Wheel Builder",
-    "dockerFile": "Dockerfile",
-    "context": "..",
-
-    // Build arguments
     "build": {
+        "dockerfile": "Dockerfile",
+        "context": "..",
         "args": {
-            "CLANG_VERSION": "14",
-            "USERNAME": "tensorflow",
-            "USER_UID": "1000",
-            "USER_GID": "1000"
+            "CLANG_VERSION": "14"
         }
     },
 
-    // Container user
     "remoteUser": "tensorflow",
 
-    // Mount the workspace
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
     "workspaceFolder": "/workspace",
 
     // Resource limits - adjust based on your machine
-    // TensorFlow builds are memory-intensive
     "runArgs": [
         "--memory=16g",
         "--cpus=8"
     ],
 
-    // Environment variables
     "containerEnv": {
         "CC": "clang",
         "CXX": "clang++",
         "TF_PYTHON_VERSION": "3.11",
-        "PYTHON_BIN_PATH": "/usr/local/bin/python3.11",
-        // Bazel cache - persisted in a volume for faster rebuilds
-        "TEST_TMPDIR": "/tmp/bazel_cache"
+        "PYTHON_BIN_PATH": "/usr/local/bin/python3.11"
     },
 
-    // Mount volumes for caching
+    // Caching volumes for faster rebuilds
     "mounts": [
-        // Bazel cache for faster rebuilds
         "source=tf-bazel-cache,target=/tmp/bazel_cache,type=volume",
-        // uv cache for Python packages
         "source=tf-uv-cache,target=/home/tensorflow/.cache/uv,type=volume"
     ],
 
-    // VS Code extensions
     "customizations": {
         "vscode": {
             "extensions": [
-                // Python
                 "ms-python.python",
-                "ms-python.vscode-pylance",
-                // C/C++
                 "ms-vscode.cpptools",
-                "llvm-vs-code-extensions.vscode-clangd",
-                // Bazel
-                "bazelbuild.vscode-bazel",
-                // Git
-                "eamodio.gitlens",
-                // General
-                "EditorConfig.EditorConfig",
-                "streetsidesoftware.code-spell-checker"
+                "bazelbuild.vscode-bazel"
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python3.11",
-                "python.formatting.provider": "black",
-                "editor.formatOnSave": true,
-                "files.trimTrailingWhitespace": true,
-                "clangd.path": "/usr/bin/clangd-14",
-                "bazel.buildifierExecutable": "/usr/local/bin/bazel",
                 "terminal.integrated.defaultProfile.linux": "bash"
             }
         }
     },
 
-    // Features to install
-    "features": {
-        // Git configuration
-        "ghcr.io/devcontainers/features/git:1": {
-            "version": "latest",
-            "ppa": false
-        }
-    },
-
-    // Commands to run
     "postCreateCommand": "echo '✅ TensorFlow dev container ready!' && clang --version && python3.11 --version && bazel --version",
 
-    // Forward ports if needed (e.g., TensorBoard)
-    "forwardPorts": [6006],
-
-    // Labels
-    "portsAttributes": {
-        "6006": {
-            "label": "TensorBoard",
-            "onAutoForward": "notify"
-        }
-    }
+    "forwardPorts": [6006]
 }

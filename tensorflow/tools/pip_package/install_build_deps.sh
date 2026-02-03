@@ -30,7 +30,8 @@
 #   --skip-python           Skip Python 3.11 installation
 #   --skip-clang            Skip Clang installation
 #   --skip-bazel            Skip Bazelisk installation
-#   --user <username>       Install user tools for this user (default: $SUDO_USER)
+#   --user <username>       Install user tools for this user (default: $SUDO_USER or root)
+#   --create-user           Create the user if it doesn't exist (for Docker builds)
 #   --help                  Show this help message
 #
 # EXAMPLES:
@@ -43,8 +44,11 @@
 #   # Skip Python (if already installed)
 #   sudo ./install_build_deps.sh --skip-python
 #
+#   # Docker build: create user and install for them
+#   ./install_build_deps.sh --user tensorflow --create-user
+#
 # NOTES:
-#   - This script requires root privileges (sudo)
+#   - This script requires root privileges (sudo) or run as root
 #   - Tested on Ubuntu 18.04, 20.04, and 22.04
 #   - After installation, Python 3.11 will be available as 'python3.11'
 #   - uv is installed to ~/.cargo/bin (added to PATH)
@@ -58,7 +62,8 @@ CLANG_VERSION="14"
 SKIP_PYTHON=0
 SKIP_CLANG=0
 SKIP_BAZEL=0
-TARGET_USER="${SUDO_USER:-$USER}"
+CREATE_USER=0
+TARGET_USER="${SUDO_USER:-root}"
 
 # Color output
 RED='\033[0;31m'
@@ -84,7 +89,7 @@ log_error() {
 }
 
 usage() {
-    head -n 50 "$0" | tail -n +17 | sed 's/^# \?//'
+    head -n 55 "$0" | tail -n +17 | sed 's/^# \?//'
     exit "${1:-0}"
 }
 
@@ -110,6 +115,10 @@ while [[ $# -gt 0 ]]; do
         --user)
             TARGET_USER="$2"
             shift 2
+            ;;
+        --create-user)
+            CREATE_USER=1
+            shift
             ;;
         --help|-h)
             usage 0
@@ -138,14 +147,39 @@ else
 fi
 
 log_info "Detected Ubuntu $UBUNTU_VERSION ($UBUNTU_CODENAME)"
+
+# Create user if requested (for Docker builds)
+if [[ $CREATE_USER -eq 1 ]]; then
+    if ! id "$TARGET_USER" &>/dev/null; then
+        log_info "Creating user: $TARGET_USER"
+        useradd -m -s /bin/bash "$TARGET_USER"
+        echo "$TARGET_USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$TARGET_USER
+        chmod 0440 /etc/sudoers.d/$TARGET_USER
+    fi
+fi
+
 log_info "Target user: $TARGET_USER"
 
 # Get user's home directory
-TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+if [[ "$TARGET_USER" == "root" ]]; then
+    TARGET_HOME="/root"
+else
+    TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+fi
+
 if [[ -z "$TARGET_HOME" ]]; then
     log_error "Cannot determine home directory for user: $TARGET_USER"
     exit 1
 fi
+
+# Helper function to run commands as target user
+run_as_user() {
+    if [[ "$TARGET_USER" == "root" ]]; then
+        bash -c "$1"
+    else
+        sudo -u "$TARGET_USER" bash -c "$1"
+    fi
+}
 
 # ==============================================================================
 # Install system dependencies
@@ -154,8 +188,9 @@ log_info "Installing system dependencies..."
 
 apt-get update
 
-apt-get install -y \
+apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     curl \
     wget \
     git \
@@ -179,6 +214,7 @@ apt-get install -y \
     libmpc-dev \
     patchelf \
     swig \
+    sudo \
     openjdk-11-jdk
 
 log_success "System dependencies installed"
@@ -220,7 +256,7 @@ if [[ $SKIP_CLANG -eq 0 ]]; then
         if [[ -n "$CLANG_VERSION" ]]; then
             echo "$LLVM_REPO" > /etc/apt/sources.list.d/llvm.list
             apt-get update
-            apt-get install -y \
+            apt-get install -y --no-install-recommends \
                 clang-${CLANG_VERSION} \
                 clang++-${CLANG_VERSION} \
                 lld-${CLANG_VERSION} \
@@ -251,44 +287,39 @@ if [[ $SKIP_PYTHON -eq 0 ]]; then
     log_info "Installing uv (Python package manager)..."
 
     # Install uv for the target user
-    sudo -u "$TARGET_USER" bash << 'UVINSTALL'
+    run_as_user '
         set -e
-
         # Install uv if not present
         if ! command -v uv &> /dev/null; then
             curl -LsSf https://astral.sh/uv/install.sh | sh
         fi
-
         # Source cargo env to get uv in path
         if [[ -f "$HOME/.cargo/env" ]]; then
             source "$HOME/.cargo/env"
         fi
-UVINSTALL
+    '
 
     log_success "uv installed"
 
     log_info "Installing Python 3.11 via uv..."
 
     # Install Python 3.11
-    sudo -u "$TARGET_USER" bash << 'PYINSTALL'
+    run_as_user '
         set -e
-
         # Source cargo env to get uv in path
         if [[ -f "$HOME/.cargo/env" ]]; then
             source "$HOME/.cargo/env"
         fi
-
         # Install Python 3.11
         uv python install 3.11
-
         # Show installed Python
         uv python list | grep 3.11 || true
-PYINSTALL
+    '
 
     log_success "Python 3.11 installed via uv"
 
     # Create symlink for python3.11 if it doesn't exist
-    PYTHON_UV_PATH=$(sudo -u "$TARGET_USER" bash -c '
+    PYTHON_UV_PATH=$(run_as_user '
         source "$HOME/.cargo/env" 2>/dev/null || true
         uv python find 3.11 2>/dev/null || true
     ')
@@ -302,18 +333,17 @@ PYINSTALL
 exec "$PYTHON_UV_PATH" "\$@"
 EOF
         chmod +x /usr/local/bin/python3.11
-        log_success "Created /usr/local/bin/python3.11 symlink"
+        log_success "Created /usr/local/bin/python3.11 wrapper"
     else
-        log_warning "Could not create python3.11 symlink. You may need to specify the full path."
+        log_warning "Could not create python3.11 wrapper. You may need to specify the full path."
         log_info "Use: uv python find 3.11 to locate Python 3.11"
     fi
 
     # Install required Python packages
     log_info "Installing required Python packages..."
-    sudo -u "$TARGET_USER" bash << 'PIPINSTALL'
+    run_as_user '
         set -e
         source "$HOME/.cargo/env" 2>/dev/null || true
-
         PYTHON_PATH=$(uv python find 3.11)
         if [[ -n "$PYTHON_PATH" ]]; then
             uv pip install --python "$PYTHON_PATH" \
@@ -321,9 +351,11 @@ EOF
                 wheel \
                 setuptools \
                 packaging \
-                requests
+                requests \
+                six \
+                mock
         fi
-PIPINSTALL
+    '
 
     log_success "Python packages installed"
 else
@@ -366,6 +398,15 @@ if [[ $SKIP_BAZEL -eq 0 ]]; then
     fi
 else
     log_info "Skipping Bazel installation"
+fi
+
+# ==============================================================================
+# Cleanup (for Docker builds)
+# ==============================================================================
+if [[ -n "$DOCKER_BUILD" ]] || [[ -f /.dockerenv ]]; then
+    log_info "Cleaning up apt cache for smaller image..."
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
 fi
 
 # ==============================================================================
