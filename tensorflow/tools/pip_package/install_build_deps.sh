@@ -152,8 +152,13 @@ log_info "Detected Ubuntu $UBUNTU_VERSION ($UBUNTU_CODENAME)"
 if [[ $CREATE_USER -eq 1 ]]; then
     if ! id "$TARGET_USER" &>/dev/null; then
         log_info "Creating user: $TARGET_USER"
+        # Install sudo first if not present (needed for sudoers.d)
+        if ! command -v sudo &>/dev/null; then
+            apt-get update && apt-get install -y --no-install-recommends sudo
+        fi
         useradd -m -s /bin/bash "$TARGET_USER"
-        echo "$TARGET_USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$TARGET_USER
+        mkdir -p /etc/sudoers.d
+        echo "$TARGET_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$TARGET_USER
         chmod 0440 /etc/sudoers.d/$TARGET_USER
     fi
 fi
