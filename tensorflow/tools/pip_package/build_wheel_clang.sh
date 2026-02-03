@@ -22,14 +22,16 @@
 # scenarios where you want to build on one machine but deploy on another with
 # a different CPU.
 #
-# Usage:
-#   ./build_wheel_clang.sh --cpu <cpu_arch> [options]
+# PREREQUISITES:
+#   Run install_build_deps.sh first to install required dependencies:
+#     ./tensorflow/tools/pip_package/install_build_deps.sh
 #
-# Required:
-#   --cpu <arch>        Target CPU architecture for optimization (e.g., skylake,
-#                       haswell, broadwell, znver2, znver3, native)
+# USAGE:
+#   ./build_wheel_clang.sh [options]
 #
-# Options:
+# OPTIONS:
+#   --cpu <arch>        Target CPU architecture for optimization
+#                       Default: znver2 (AMD EPYC 7702 / Zen 2)
 #   --python <path>     Path to Python 3.11 interpreter (default: python3.11)
 #   --clang <path>      Path to clang compiler (default: clang)
 #   --output <dir>      Output directory for the wheel (default: /tmp/tensorflow_wheel)
@@ -40,25 +42,57 @@
 #   --project-name <n>  Custom project name for the wheel
 #   --help              Show this help message
 #
-# Examples:
+# EXAMPLES:
+#   # Build with defaults (optimized for AMD EPYC 7702 / znver2)
+#   ./build_wheel_clang.sh
+#
+#   # Build optimized for AMD EPYC 7702 (Zen 2 / Rome) - RECOMMENDED
+#   ./build_wheel_clang.sh --cpu znver2
+#
+#   # Build with LTO for maximum performance (longer build time)
+#   ./build_wheel_clang.sh --cpu znver2 --lto
+#
 #   # Build optimized for Intel Skylake
 #   ./build_wheel_clang.sh --cpu skylake
-#
-#   # Build optimized for AMD Zen 2 with custom Python path
-#   ./build_wheel_clang.sh --cpu znver2 --python /usr/local/bin/python3.11
 #
 #   # Build optimized for the build machine's CPU
 #   ./build_wheel_clang.sh --cpu native
 #
-#   # Build with LTO and maximum optimization
-#   ./build_wheel_clang.sh --cpu haswell --lto --opt-level Ofast
+#   # Build with custom Python path (e.g., using uv-managed Python)
+#   ./build_wheel_clang.sh --python ~/.local/share/uv/python/cpython-3.11.*/bin/python3.11
 #
-# Supported CPU architectures (non-exhaustive list):
-#   Intel: nehalem, westmere, sandybridge, ivybridge, haswell, broadwell,
-#          skylake, skylake-avx512, cascadelake, icelake-client, icelake-server,
-#          tigerlake, alderlake, sapphirerapids
-#   AMD:   bdver1, bdver2, bdver3, bdver4, znver1, znver2, znver3, znver4
-#   Generic: x86-64, x86-64-v2, x86-64-v3, x86-64-v4, native
+# SUPPORTED CPU ARCHITECTURES:
+#
+#   AMD (Zen Family) - Recommended for EPYC/Ryzen:
+#     znver1          Zen 1 (EPYC 7001, Ryzen 1000/2000)
+#     znver2          Zen 2 (EPYC 7002 "Rome", Ryzen 3000) <- AMD EPYC 7702
+#     znver3          Zen 3 (EPYC 7003 "Milan", Ryzen 5000)
+#     znver4          Zen 4 (EPYC 9004 "Genoa", Ryzen 7000)
+#
+#   Intel (Common Server/Desktop):
+#     haswell         4th Gen Core, Xeon E5 v3 (2013)
+#     broadwell       5th Gen Core, Xeon E5 v4 (2015)
+#     skylake         6th Gen Core (2015)
+#     skylake-avx512  Xeon Scalable 1st Gen "Skylake-SP" (2017)
+#     cascadelake     Xeon Scalable 2nd Gen (2019)
+#     icelake-server  Xeon Scalable 3rd Gen (2021)
+#     sapphirerapids  Xeon Scalable 4th Gen (2023)
+#
+#   Generic (Portable builds):
+#     x86-64          Baseline x86_64 (maximum compatibility)
+#     x86-64-v2       + SSE4.2, SSSE3, POPCNT (Nehalem+)
+#     x86-64-v3       + AVX2, BMI1/2, FMA (Haswell+)
+#     x86-64-v4       + AVX-512 (Skylake-X+)
+#     native          Auto-detect build machine's CPU
+#
+# CPU FEATURES ENABLED BY znver2 (AMD EPYC 7702):
+#   - AVX2: 256-bit vector operations for matrix math
+#   - FMA: Fused multiply-add for neural network layers
+#   - SSE4.1/SSE4.2: Streaming SIMD extensions
+#   - BMI1/BMI2: Bit manipulation instructions
+#   - SHA-NI: Hardware SHA acceleration
+#   - ADX: Multi-precision arithmetic
+#   - CLFLUSHOPT: Optimized cache line flush
 #
 # ==============================================================================
 
@@ -68,8 +102,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# Default values
-TARGET_CPU=""
+# Default values - optimized for AMD EPYC 7702 (Zen 2)
+TARGET_CPU="znver2"
 PYTHON_BIN="python3.11"
 CLANG_PATH="clang"
 OUTPUT_DIR="/tmp/tensorflow_wheel"
@@ -103,7 +137,7 @@ log_error() {
 }
 
 usage() {
-    head -n 60 "$0" | tail -n +17 | sed 's/^# \?//'
+    head -n 95 "$0" | tail -n +17 | sed 's/^# \?//'
     exit "${1:-0}"
 }
 
@@ -156,13 +190,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate required arguments
-if [[ -z "$TARGET_CPU" ]]; then
-    log_error "Target CPU architecture is required. Use --cpu <arch>"
-    echo ""
-    usage 1
-fi
-
 # Validate optimization level
 case "$OPT_LEVEL" in
     O1|O2|O3|Ofast|Os|Oz)
@@ -179,6 +206,7 @@ check_tool() {
     local path="$2"
     if ! command -v "$path" &> /dev/null; then
         log_error "$tool not found at: $path"
+        log_info "Run install_build_deps.sh to install dependencies"
         exit 1
     fi
 }
