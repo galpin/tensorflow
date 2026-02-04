@@ -56,7 +56,8 @@
 set -e
 
 # Default values
-CLANG_VERSION="14"
+# Note: Clang version will be auto-detected based on Ubuntu version if not specified
+CLANG_VERSION=""
 SKIP_CLANG=0
 SKIP_BAZEL=0
 CREATE_USER=0
@@ -140,6 +141,21 @@ else
 fi
 
 log_info "Detected Ubuntu $UBUNTU_VERSION ($UBUNTU_CODENAME)"
+
+# Set default Clang version based on Ubuntu version if not specified
+if [[ -z "$CLANG_VERSION" ]]; then
+    case "$UBUNTU_CODENAME" in
+        noble)
+            # Ubuntu 24.04: LLVM 14 not available, use Clang 18
+            CLANG_VERSION="18"
+            ;;
+        *)
+            # Older Ubuntu versions: use Clang 14
+            CLANG_VERSION="14"
+            ;;
+    esac
+    log_info "Auto-selected Clang version: $CLANG_VERSION"
+fi
 
 # Create user if requested (for Docker builds)
 if [[ $CREATE_USER -eq 1 ]]; then
