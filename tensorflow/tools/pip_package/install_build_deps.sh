@@ -275,13 +275,32 @@ else
 fi
 
 # ==============================================================================
-# Note: uv and Python should be installed separately as the target user
+# Install Python 3.11 (system-wide via deadsnakes PPA)
 # ==============================================================================
-log_info "Skipping uv/Python installation (install separately as your user)"
-log_info "To install uv and Python, run as your regular user:"
-log_info "  curl -LsSf https://astral.sh/uv/install.sh | sh"
-log_info "  source ~/.cargo/env"
-log_info "  uv python install 3.11"
+log_info "Installing Python 3.11..."
+
+if command -v python3.11 &> /dev/null; then
+    log_info "Python 3.11 is already installed"
+else
+    # Add deadsnakes PPA for Python 3.11
+    apt-get install -y --no-install-recommends software-properties-common
+    add-apt-repository -y ppa:deadsnakes/ppa
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-venv \
+        python3.11-dev \
+        python3.11-distutils
+fi
+
+# Install pip for Python 3.11
+if ! python3.11 -m pip --version &> /dev/null; then
+    log_info "Installing pip for Python 3.11..."
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+fi
+
+log_success "Python 3.11 installed"
+python3.11 --version
 
 # ==============================================================================
 # Install Bazelisk

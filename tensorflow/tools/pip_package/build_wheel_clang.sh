@@ -18,7 +18,7 @@
 #
 # This script builds TensorFlow optimized for a specific CPU architecture that
 # may differ from the build machine. It automatically creates a virtual
-# environment using uv with the specified Python version.
+# environment using the system Python.
 #
 # PREREQUISITES:
 #   Run install_build_deps.sh first to install required dependencies:
@@ -202,7 +202,7 @@ check_tool() {
 log_info "Checking required tools..."
 check_tool "Clang" "$CLANG_PATH"
 check_tool "Bazel" "bazel"
-check_tool "uv" "uv"
+check_tool "Python ${PYTHON_VERSION}" "python${PYTHON_VERSION}"
 
 # Get absolute paths
 CLANG_PATH="$(command -v "$CLANG_PATH")"
@@ -220,7 +220,7 @@ if ! command -v "$CLANGXX_PATH" &> /dev/null; then
 fi
 
 # ==============================================================================
-# Create virtual environment with uv
+# Create virtual environment with system Python
 # ==============================================================================
 log_info "Setting up Python ${PYTHON_VERSION} virtual environment..."
 
@@ -234,7 +234,7 @@ if [[ -d "$VENV_DIR" ]]; then
     log_info "Using existing virtual environment: $VENV_DIR"
 else
     log_info "Creating virtual environment with Python ${PYTHON_VERSION}..."
-    uv venv --python "$PYTHON_VERSION" "$VENV_DIR"
+    "python${PYTHON_VERSION}" -m venv "$VENV_DIR"
     log_success "Virtual environment created: $VENV_DIR"
 fi
 
@@ -253,7 +253,8 @@ fi
 
 # Install required packages
 log_info "Installing required Python packages..."
-uv pip install numpy wheel setuptools packaging requests six mock
+pip install --upgrade pip
+pip install numpy wheel setuptools packaging requests six mock
 
 log_success "Virtual environment ready: Python $ACTUAL_PYTHON_VERSION"
 
