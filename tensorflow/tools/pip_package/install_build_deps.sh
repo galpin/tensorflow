@@ -14,23 +14,26 @@
 # limitations under the License.
 # ==============================================================================
 #
-# Install build dependencies for building TensorFlow Python wheels on Ubuntu.
+# Install system build dependencies for building TensorFlow Python wheels on Ubuntu.
 #
 # This script installs:
 #   - Clang compiler (version 14 or later)
-#   - Python 3.11 via uv (fast Python package manager)
 #   - Bazelisk (Bazel version manager)
 #   - System libraries required for TensorFlow compilation
+#
+# NOTE: uv and Python must be installed separately as your regular user:
+#   curl -LsSf https://astral.sh/uv/install.sh | sh
+#   source ~/.cargo/env
+#   uv python install 3.11
 #
 # USAGE:
 #   sudo ./install_build_deps.sh [options]
 #
 # OPTIONS:
 #   --clang-version <ver>   Clang version to install (default: 14)
-#   --skip-python           Skip Python 3.11 installation
 #   --skip-clang            Skip Clang installation
 #   --skip-bazel            Skip Bazelisk installation
-#   --user <username>       Install user tools for this user (default: $SUDO_USER or root)
+#   --user <username>       User to create (for Docker builds)
 #   --create-user           Create the user if it doesn't exist (for Docker builds)
 #   --help                  Show this help message
 #
@@ -41,17 +44,12 @@
 #   # Install with Clang 16
 #   sudo ./install_build_deps.sh --clang-version 16
 #
-#   # Skip Python (if already installed)
-#   sudo ./install_build_deps.sh --skip-python
-#
 #   # Docker build: create user and install for them
 #   ./install_build_deps.sh --user tensorflow --create-user
 #
 # NOTES:
 #   - This script requires root privileges (sudo) or run as root
 #   - Tested on Ubuntu 18.04, 20.04, and 22.04
-#   - After installation, Python 3.11 will be available as 'python3.11'
-#   - uv is installed to ~/.cargo/bin (added to PATH)
 #
 # ==============================================================================
 
@@ -59,7 +57,6 @@ set -e
 
 # Default values
 CLANG_VERSION="14"
-SKIP_PYTHON=0
 SKIP_CLANG=0
 SKIP_BAZEL=0
 CREATE_USER=0
@@ -99,10 +96,6 @@ while [[ $# -gt 0 ]]; do
         --clang-version)
             CLANG_VERSION="$2"
             shift 2
-            ;;
-        --skip-python)
-            SKIP_PYTHON=1
-            shift
             ;;
         --skip-clang)
             SKIP_CLANG=1
@@ -164,27 +157,6 @@ if [[ $CREATE_USER -eq 1 ]]; then
 fi
 
 log_info "Target user: $TARGET_USER"
-
-# Get user's home directory
-if [[ "$TARGET_USER" == "root" ]]; then
-    TARGET_HOME="/root"
-else
-    TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-fi
-
-if [[ -z "$TARGET_HOME" ]]; then
-    log_error "Cannot determine home directory for user: $TARGET_USER"
-    exit 1
-fi
-
-# Helper function to run commands as target user
-run_as_user() {
-    if [[ "$TARGET_USER" == "root" ]]; then
-        bash -c "$1"
-    else
-        sudo -u "$TARGET_USER" bash -c "$1"
-    fi
-}
 
 # ==============================================================================
 # Install system dependencies
@@ -287,86 +259,13 @@ else
 fi
 
 # ==============================================================================
-# Install uv and Python 3.11
+# Note: uv and Python should be installed separately as the target user
 # ==============================================================================
-if [[ $SKIP_PYTHON -eq 0 ]]; then
-    log_info "Installing uv (Python package manager)..."
-
-    # Install uv for the target user
-    run_as_user '
-        set -e
-        # Install uv if not present
-        if ! command -v uv &> /dev/null; then
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-        fi
-        # Source cargo env to get uv in path
-        if [[ -f "$HOME/.cargo/env" ]]; then
-            source "$HOME/.cargo/env"
-        fi
-    '
-
-    log_success "uv installed"
-
-    log_info "Installing Python 3.11 via uv..."
-
-    # Install Python 3.11
-    run_as_user '
-        set -e
-        # Source cargo env to get uv in path
-        if [[ -f "$HOME/.cargo/env" ]]; then
-            source "$HOME/.cargo/env"
-        fi
-        # Install Python 3.11
-        uv python install 3.11
-        # Show installed Python
-        uv python list | grep 3.11 || true
-    '
-
-    log_success "Python 3.11 installed via uv"
-
-    # Create symlink for python3.11 if it doesn't exist
-    PYTHON_UV_PATH=$(run_as_user '
-        source "$HOME/.cargo/env" 2>/dev/null || true
-        uv python find 3.11 2>/dev/null || true
-    ')
-
-    if [[ -n "$PYTHON_UV_PATH" && -x "$PYTHON_UV_PATH" ]]; then
-        log_info "Python 3.11 location: $PYTHON_UV_PATH"
-
-        # Create a wrapper script for python3.11
-        cat > /usr/local/bin/python3.11 << EOF
-#!/bin/bash
-exec "$PYTHON_UV_PATH" "\$@"
-EOF
-        chmod +x /usr/local/bin/python3.11
-        log_success "Created /usr/local/bin/python3.11 wrapper"
-    else
-        log_warning "Could not create python3.11 wrapper. You may need to specify the full path."
-        log_info "Use: uv python find 3.11 to locate Python 3.11"
-    fi
-
-    # Install required Python packages
-    log_info "Installing required Python packages..."
-    run_as_user '
-        set -e
-        source "$HOME/.cargo/env" 2>/dev/null || true
-        PYTHON_PATH=$(uv python find 3.11)
-        if [[ -n "$PYTHON_PATH" ]]; then
-            uv pip install --python "$PYTHON_PATH" \
-                numpy \
-                wheel \
-                setuptools \
-                packaging \
-                requests \
-                six \
-                mock
-        fi
-    '
-
-    log_success "Python packages installed"
-else
-    log_info "Skipping Python installation"
-fi
+log_info "Skipping uv/Python installation (install separately as your user)"
+log_info "To install uv and Python, run as your regular user:"
+log_info "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+log_info "  source ~/.cargo/env"
+log_info "  uv python install 3.11"
 
 # ==============================================================================
 # Install Bazelisk
@@ -427,25 +326,19 @@ if [[ $SKIP_CLANG -eq 0 ]]; then
     echo "Clang:      $(clang --version 2>/dev/null | head -n1 || echo 'Not found')"
 fi
 
-if [[ $SKIP_PYTHON -eq 0 ]]; then
-    echo "Python:     $(python3.11 --version 2>/dev/null || echo 'Use: uv python find 3.11')"
-    echo "uv:         Installed for user $TARGET_USER"
-fi
-
 if [[ $SKIP_BAZEL -eq 0 ]]; then
     echo "Bazel:      $(/usr/local/bin/bazel version 2>/dev/null | head -n1 || echo 'Not found')"
 fi
 
 echo "=============================================="
 echo ""
-echo "Next steps:"
-echo "  1. Log out and log back in (or run: source ~/.cargo/env)"
+echo "Next steps (run as your regular user, not root):"
+echo ""
+echo "  1. Install uv and Python:"
+echo "     curl -LsSf https://astral.sh/uv/install.sh | sh"
+echo "     source ~/.cargo/env"
+echo "     uv python install 3.11"
+echo ""
 echo "  2. Run the build script:"
 echo "     ./tensorflow/tools/pip_package/build_wheel_clang.sh"
 echo ""
-
-# Add cargo to PATH hint
-if [[ $SKIP_PYTHON -eq 0 ]]; then
-    log_info "To use uv immediately, run:"
-    echo "  source ~/.cargo/env"
-fi
