@@ -4,7 +4,7 @@
 FROM ubuntu:24.04
 
 ARG USERNAME=tensorflow
-ARG USER_UID=1000
+ARG USER_UID=10042
 ARG USER_GID=$USER_UID
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -27,6 +27,6 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && rm -rf /var/lib/apt/lists/*
 
 USER $USERNAME
-WORKDIR /workspace
+WORKDIR /workspace/tensorflow/tools/pip_package
 
 CMD ["/bin/bash"]
