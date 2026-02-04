@@ -46,7 +46,5 @@
         }
     },
 
-    "postCreateCommand": "echo '✅ TensorFlow dev container ready!' && clang --version && python3.11 --version && bazel --version",
-
     "forwardPorts": [6006]
 }
