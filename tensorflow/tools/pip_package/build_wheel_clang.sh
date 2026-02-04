@@ -360,10 +360,14 @@ log_info "Created temporary bazelrc: $TEMP_BAZELRC"
 # ==============================================================================
 # Build TensorFlow
 # ==============================================================================
+# Startup options must come before the command
+BAZEL_STARTUP_FLAGS=(
+    "--bazelrc=${TEMP_BAZELRC}"
+)
+
 BAZEL_BUILD_FLAGS=(
     "--config=opt"
     "--config=clang_wheel"
-    "--bazelrc=${TEMP_BAZELRC}"
 )
 
 for config in "${EXTRA_CONFIGS[@]}"; do
@@ -375,13 +379,14 @@ if [[ -n "$BUILD_JOBS" ]]; then
 fi
 
 log_info "Starting TensorFlow build..."
-log_info "Bazel flags: ${BAZEL_BUILD_FLAGS[*]}"
+log_info "Bazel startup flags: ${BAZEL_STARTUP_FLAGS[*]}"
+log_info "Bazel build flags: ${BAZEL_BUILD_FLAGS[*]}"
 
 log_info "Cleaning previous build artifacts..."
-bazel clean --expunge 2>/dev/null || true
+bazel "${BAZEL_STARTUP_FLAGS[@]}" clean --expunge 2>/dev/null || true
 
 log_info "Building TensorFlow pip package..."
-bazel build \
+bazel "${BAZEL_STARTUP_FLAGS[@]}" build \
     "${BAZEL_BUILD_FLAGS[@]}" \
     //tensorflow/tools/pip_package:build_pip_package
 
