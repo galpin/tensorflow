@@ -38,6 +38,7 @@
 #   --opt-level <level> Optimization level: O1, O2, O3, Ofast (default: O3)
 #   --lto               Enable Link Time Optimization
 #   --project-name <n>  Custom project name for the wheel
+#   --skip-cpu-check    Skip CPU architecture validation (for cross-compilation)
 #   --help              Show this help message
 #
 # EXAMPLES:
@@ -96,6 +97,7 @@ EXTRA_CONFIGS=()
 OPT_LEVEL="O3"
 ENABLE_LTO=0
 PROJECT_NAME=""
+SKIP_CPU_CHECK=0
 
 # Color output
 RED='\033[0;31m'
@@ -167,6 +169,10 @@ while [[ $# -gt 0 ]]; do
         --project-name)
             PROJECT_NAME="$2"
             shift 2
+            ;;
+        --skip-cpu-check)
+            SKIP_CPU_CHECK=1
+            shift
             ;;
         --help|-h)
             usage 0
@@ -268,14 +274,19 @@ log_info "Target CPU architecture: $TARGET_CPU"
 log_info "Optimization level: -$OPT_LEVEL"
 log_info "Output directory: $OUTPUT_DIR"
 
-# Verify the target CPU is valid
-log_info "Validating target CPU architecture..."
-if ! "$CLANG_PATH" -march="$TARGET_CPU" -x c -c /dev/null -o /dev/null 2>/dev/null; then
-    log_error "Invalid CPU architecture: $TARGET_CPU"
-    log_info "Run 'clang --print-supported-cpus' to see supported CPU architectures"
-    exit 1
+# Verify the target CPU is valid (skip for cross-compilation)
+if [[ $SKIP_CPU_CHECK -eq 1 ]]; then
+    log_warning "Skipping CPU architecture validation (cross-compilation mode)"
+else
+    log_info "Validating target CPU architecture..."
+    if ! "$CLANG_PATH" -march="$TARGET_CPU" -x c -c /dev/null -o /dev/null 2>/dev/null; then
+        log_error "Invalid CPU architecture: $TARGET_CPU"
+        log_info "Run 'clang --print-supported-cpus' to see supported CPU architectures"
+        log_info "Use --skip-cpu-check for cross-compilation scenarios"
+        exit 1
+    fi
+    log_success "CPU architecture '$TARGET_CPU' is valid"
 fi
-log_success "CPU architecture '$TARGET_CPU' is valid"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
