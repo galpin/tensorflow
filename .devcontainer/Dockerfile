@@ -1,7 +1,7 @@
 # TensorFlow Development Container
 # Minimal base image - run install_build_deps.sh manually after container starts
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG USERNAME=tensorflow
 ARG USER_UID=1000
