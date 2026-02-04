@@ -28,8 +28,7 @@
 
     // Caching volumes for faster rebuilds
     "mounts": [
-        "source=tf-bazel-cache,target=/tmp/bazel_cache,type=volume",
-        "source=tf-uv-cache,target=/home/tensorflow/.cache/uv,type=volume"
+        "source=tf-bazel-cache,target=/tmp/bazel_cache,type=volume"
     ],
 
     "customizations": {
