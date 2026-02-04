@@ -14,6 +14,16 @@ set -e
 
 PYTHON_VERSION="${1:-3.11}"
 
+# Check for required dependencies
+if ! command -v curl &>/dev/null; then
+    echo "[ERROR] curl is not installed."
+    echo ""
+    echo "Please run install_build_deps.sh first as root:"
+    echo "  sudo ./tensorflow/tools/pip_package/install_build_deps.sh"
+    echo ""
+    exit 1
+fi
+
 echo "[INFO] Installing uv..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
